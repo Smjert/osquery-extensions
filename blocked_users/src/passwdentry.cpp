@@ -57,7 +57,7 @@ PasswdEntry::PasswdEntry(const std::string& username) : passwd_entry{} {
 
   if (error == 0) {
     if (result == nullptr) {
-      throw osquery::Status(1, "No user found with userename " + username);
+      throw osquery::Status(1, "No user found with username " + username);
     }
   } else {
     throw osquery::Status(1,

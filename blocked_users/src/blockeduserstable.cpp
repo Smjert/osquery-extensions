@@ -16,10 +16,13 @@
 
 #include "blockeduserstable.h"
 
-#include <iostream>
 #include <pwd.h>
 #include <shadow.h>
 #include <sys/types.h>
+
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
 #include <boost/thread.hpp>
 
@@ -67,9 +70,14 @@ osquery::Status usernameToUid(uid_t& uid, const std::string& username) {
 }
 
 osquery::Status parseUid(uid_t& uid, const std::string& str_uid) {
-  auto user_id = std::strtoul(str_uid.c_str(), nullptr, 10);
+  if (str_uid.empty()) {
+    return osquery::Status::failure("Empty uid received");
+  }
 
-  if (errno == ERANGE || user_id > UINT_MAX) {
+  char* endptr = nullptr;
+  uint64_t user_id = std::strtoul(str_uid.c_str(), &endptr, 10);
+
+  if (user_id > UINT_MAX || errno == ERANGE || *endptr != '\0') {
     errno = 0;
     return osquery::Status(1, "Invalid uid given: " + str_uid);
   }
@@ -79,9 +87,14 @@ osquery::Status parseUid(uid_t& uid, const std::string& str_uid) {
   return osquery::Status(0);
 }
 
-osquery::Status validateUserName(const std::string& name) {
-  // Dummy check, to be improved?
-  if (name.find("'") != std::string::npos) {
+osquery::Status validateUserName(const std::string& username) {
+  if (username.length() > 32) {
+    return osquery::Status::failure("Username too long");
+  }
+
+  if (std::find_if(username.begin(),
+                   username.end(),
+                   static_cast<int (*)(int)>(std::isalnum)) == username.end()) {
     return osquery::Status::failure("Unsafe character found in the username");
   }
 
@@ -89,11 +102,6 @@ osquery::Status validateUserName(const std::string& name) {
 }
 
 osquery::Status lockUser(const std::string& username) {
-  auto status = validateUserName(username);
-  if (!status.ok()) {
-    return status;
-  }
-
   lockArgs.back() = username;
 
   ProcessOutput output;
@@ -259,25 +267,43 @@ osquery::QueryData BlockedUsersTable::insert(
   }
 
   std::string username;
-  uid_t user_id;
+  uid_t user_id = 0;
+  bool convert_username_to_uid = false;
 
   auto username_it = row.find("username");
-  if (username_it != row.end()) {
-    username = username_it->second;
-    status = usernameToUid(user_id, username);
 
-  } else {
+  if (username_it == row.end()) {
     const auto& str_user_id = row.at("uid");
     status = parseUid(user_id, str_user_id);
 
     if (status.ok()) {
       status = uidToUsername(username, user_id);
     }
+
+    if (!status.ok()) {
+      return {{std::make_pair("status", "failure"),
+               std::make_pair("message", status.getMessage())}};
+    }
+  } else {
+    username = username_it->second;
+    convert_username_to_uid = true;
   }
 
+  status = validateUserName(username);
   if (!status.ok()) {
-    return {{std::make_pair("status", "failure"),
-             std::make_pair("message", status.getMessage())}};
+    return {
+        {std::make_pair("status", "failure"),
+         std::make_pair("message",
+                        "Username validation failed: " + status.getMessage())}};
+  }
+
+  if (convert_username_to_uid) {
+    status = usernameToUid(user_id, username);
+
+    if (!status.ok()) {
+      return {{std::make_pair("status", "failure"),
+               std::make_pair("message", status.getMessage())}};
+    }
   }
 
   status = lockUser(username);
@@ -312,6 +338,14 @@ osquery::QueryData BlockedUsersTable::delete_(
   if (!status.ok()) {
     return {{std::make_pair("status", "failure"),
              std::make_pair("message", status.getMessage())}};
+  }
+
+  status = validateUserName(username);
+  if (!status.ok()) {
+    return {
+        {std::make_pair("status", "failure"),
+         std::make_pair("message",
+                        "Username validation failed: " + status.getMessage())}};
   }
 
   status = unlockUser(username);
