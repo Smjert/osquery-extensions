@@ -306,6 +306,11 @@ osquery::QueryData BlockedUsersTable::insert(
     }
   }
 
+  if (user_id == 0) {
+    return {{std::make_pair("status", "failure"),
+             std::make_pair("message", "root user cannot be locked")}};
+  }
+
   status = lockUser(username);
   if (!status.ok()) {
     return {
@@ -324,12 +329,17 @@ osquery::QueryData BlockedUsersTable::delete_(
     osquery::QueryContext& context, const osquery::PluginRequest& request) {
   boost::lock_guard<boost::shared_mutex> passwd_lock(passwd_mutex);
   std::string str_user_id = request.at("id");
-  uid_t user_id;
+  uid_t user_id = 0;
   auto status = parseUid(user_id, str_user_id);
 
   if (!status.ok()) {
     return {{std::make_pair("status", "failure"),
              std::make_pair("message", status.getMessage())}};
+  }
+
+  if (user_id == 0) {
+    return {{std::make_pair("status", "failure"),
+             std::make_pair("message", "root user is not a valid uid")}};
   }
 
   std::string username;
