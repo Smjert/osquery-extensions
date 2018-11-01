@@ -16,14 +16,18 @@
 
 #include "blockeduserstable.h"
 
+#include <dlfcn.h>
+#include <proc/readproc.h>
 #include <pwd.h>
 #include <shadow.h>
+#include <signal.h>
 #include <sys/types.h>
 
 #include <algorithm>
 #include <cctype>
 #include <iostream>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/thread.hpp>
 
 #include <trailofbits/extutils.h>
@@ -46,6 +50,68 @@ struct LockedUser final {
 };
 
 using LockedUsers = std::vector<LockedUser>;
+
+typedef struct {
+  const char* name;
+  const char* message;
+  int _need_free;
+} sd_bus_error;
+
+using sd_bus = void;
+using sd_bus_message = void;
+using sd_bus_default_system_ptr = int (*)(sd_bus** ret);
+using sd_bus_call_method_ptr = int (*)(sd_bus* bus,
+                                       const char* destination,
+                                       const char* path,
+                                       const char* interface,
+                                       const char* member,
+                                       sd_bus_error* ret_error,
+                                       sd_bus_message** reply,
+                                       const char* types,
+                                       ...);
+using sd_bus_flush_ptr = int (*)(sd_bus* bus);
+using sd_bus_close_ptr = int (*)(sd_bus* bus);
+using sd_bus_unref_ptr = int (*)(sd_bus* bus);
+
+sd_bus_default_system_ptr sd_bus_default_system = nullptr;
+sd_bus_call_method_ptr sd_bus_call_method = nullptr;
+sd_bus_flush_ptr sd_bus_flush = nullptr;
+sd_bus_close_ptr sd_bus_close = nullptr;
+sd_bus_unref_ptr sd_bus_unref = nullptr;
+sd_bus* sd_bus_ptr = nullptr;
+
+bool loadSystemd() {
+  void* systemd_library = dlopen("libsystemd.so.0", RTLD_LAZY | RTLD_GLOBAL);
+
+  bool init_success = true;
+
+  if (systemd_library != nullptr) {
+    sd_bus_default_system = reinterpret_cast<sd_bus_default_system_ptr>(
+        dlsym(systemd_library, "sd_bus_default_system"));
+    sd_bus_call_method = reinterpret_cast<sd_bus_call_method_ptr>(
+        dlsym(systemd_library, "sd_bus_call_method"));
+    sd_bus_flush = reinterpret_cast<sd_bus_flush_ptr>(
+        dlsym(systemd_library, "sd_bus_flush"));
+    sd_bus_close = reinterpret_cast<sd_bus_close_ptr>(
+        dlsym(systemd_library, "sd_bus_close"));
+    sd_bus_unref = reinterpret_cast<sd_bus_unref_ptr>(
+        dlsym(systemd_library, "sd_bus_unref"));
+
+    if (!sd_bus_default_system || !sd_bus_call_method || !sd_bus_flush ||
+        !sd_bus_close || !sd_bus_unref) {
+      VLOG(1) << "Failed to find the required symbols in libsystemd";
+      init_success = false;
+    }
+
+  } else {
+    VLOG(1) << "Failed to find libsystemd library";
+    init_success = false;
+  }
+
+  return init_success;
+}
+
+bool systemd_is_loaded = loadSystemd();
 
 osquery::Status uidToUsername(std::string& username, uid_t uid) {
   try {
@@ -127,6 +193,81 @@ osquery::Status lockUser(const std::string& username) {
   return osquery::Status(0);
 }
 
+osquery::Status logoutUser(const std::string& username, uid_t uid) {
+  bool systemd_logout_failed = true;
+
+  if (systemd_is_loaded) {
+    int sd_bus_init_error = sd_bus_default_system(&sd_bus_ptr);
+    if (sd_bus_init_error >= 0) {
+      sd_bus_error bus_error{};
+      int call_result = sd_bus_call_method(sd_bus_ptr,
+                                           "org.freedesktop.login1",
+                                           "/org/freedesktop/login1",
+                                           "org.freedesktop.login1.Manager",
+                                           "TerminateUser",
+                                           &bus_error,
+                                           nullptr,
+                                           "u",
+                                           uid);
+      if (call_result < 0) {
+        VLOG(1) << "Failed to terminate the user using systemd, error: "
+                << bus_error.message;
+      } else {
+        systemd_logout_failed = false;
+      }
+
+      sd_bus_flush(sd_bus_ptr);
+      sd_bus_close(sd_bus_ptr);
+      sd_bus_unref(sd_bus_ptr);
+
+    } else {
+      VLOG(1) << "Failed to initialize a systemd bus, error: "
+              << std::to_string(-sd_bus_init_error);
+    }
+  }
+
+  auto process = std::make_unique<proc_t>();
+
+  if (systemd_logout_failed) {
+    PROCTAB* proctab = openproc(PROC_UID, &uid, 1);
+
+    if (proctab == nullptr) {
+      return osquery::Status::failure(
+          "Unable to kill the user processes, user logout failed");
+    }
+
+    while (readproc(proctab, process.get()) != nullptr) {
+      kill(process->tid, SIGKILL);
+    }
+
+    closeproc(proctab);
+  }
+
+  /* TODO: This is necessary because otherwise the systemd process of the user
+   * we terminated is still running and the query will exit with error due to
+   * the following process scan. Is there a better way?
+   */
+  sleep(1);
+
+  PROCTAB* proctab = openproc(PROC_UID, &uid, 1);
+
+  if (proctab == nullptr) {
+    return osquery::Status::failure(
+        "Unable to verify if the user processes have been killed, some "
+        "processes might still be running");
+  }
+
+  if (readproc(proctab, process.get()) != nullptr) {
+    closeproc(proctab);
+    return osquery::Status::failure(
+        "The user " + std::to_string(uid) +
+        " has not been fully logged out, some processes are still running.");
+  }
+  closeproc(proctab);
+
+  return osquery::Status(0);
+}
+
 osquery::Status unlockUser(const std::string& username) {
   auto status = validateUserName(username);
   if (!status.ok()) {
@@ -192,11 +333,11 @@ osquery::Status GetRowData(osquery::Row& row,
     return osquery::Status(1, "Invalid json received by osquery");
   }
 
-  if (document.Size() != 2U) {
+  if (document.Size() != 3U) {
     return osquery::Status(1,
                            "Wrong column count " +
                                std::to_string(document.Size()) +
-                               " received, 2 expected");
+                               " received, 3 expected");
   }
 
   if (!document[0].IsNull()) {
@@ -207,6 +348,14 @@ osquery::Status GetRowData(osquery::Row& row,
     row["username"] = document[1].GetString();
   }
 
+  if (!document[2].IsNull()) {
+    std::string logout = document[2].GetString();
+    boost::to_upper(logout);
+    row["logout_user"] = std::move(logout);
+  } else {
+    row["logout_user"] = "N";
+  }
+
   return osquery::Status(0);
 }
 } // namespace
@@ -215,7 +364,8 @@ osquery::TableColumns BlockedUsersTable::columns() const {
   // clang-format off
   return {
     std::make_tuple("uid", osquery::TEXT_TYPE, osquery::ColumnOptions::DEFAULT),
-    std::make_tuple("username", osquery::TEXT_TYPE, osquery::ColumnOptions::DEFAULT)
+    std::make_tuple("username", osquery::TEXT_TYPE, osquery::ColumnOptions::DEFAULT),
+    std::make_tuple("logout_user", osquery::TEXT_TYPE, osquery::ColumnOptions::DEFAULT)
   };
   // clang-format on
 }
@@ -317,6 +467,17 @@ osquery::QueryData BlockedUsersTable::insert(
         {std::make_pair("status", "failure"),
          std::make_pair("message",
                         "Failed to lock the user: " + status.getMessage())}};
+  }
+
+  if (row["logout_user"] == "Y") {
+    status = logoutUser(username, user_id);
+
+    if (!status.ok()) {
+      return {{std::make_pair("status", "failure"),
+               std::make_pair(
+                   "message",
+                   "Failed to logout the user: " + status.getMessage())}};
+    }
   }
 
   osquery::Row result;

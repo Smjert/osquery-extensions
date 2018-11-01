@@ -31,7 +31,9 @@ function(blockedUsersMain)
     SOURCES ${source_files}
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src" ${project_include_folders}
     MAININCLUDES blockeduserstable.h
+    LIBRARIES procps
   )
+
 endfunction()
 
 blockedUsersMain()
