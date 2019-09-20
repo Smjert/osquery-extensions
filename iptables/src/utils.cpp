@@ -24,7 +24,7 @@
  *  You may select, at your option, one of the above-listed licenses.
  */
 
-#include <osquery/sdk.h>
+#include <osquery/sdk/sdk.h>
 
 #include <net/if.h>
 #include <netdb.h>
