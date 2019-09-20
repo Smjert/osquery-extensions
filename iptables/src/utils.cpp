@@ -25,6 +25,7 @@
  */
 
 #include <osquery/sdk/sdk.h>
+#include <osquery/filesystem/filesystem.h>
 
 #include <net/if.h>
 #include <netdb.h>
