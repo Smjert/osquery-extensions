@@ -23,9 +23,9 @@ function(main)
 
   if(UNIX)
     list(APPEND project_libraries
-      boost_system-mt
-      boost_serialization-mt
-      boost_regex-mt
+      # boost_system-mt
+      # boost_serialization-mt
+      # boost_regex-mt
     )
   else()
     list(APPEND project_libraries
@@ -96,4 +96,3 @@ function(main)
 endfunction()
 
 main()
-
