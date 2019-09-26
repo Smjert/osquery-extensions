@@ -38,7 +38,7 @@ class HostBlacklistTable final : public BaseTable {
 
   osquery::TableColumns columns() const;
 
-#if OSQUERY_VERSION_NUMBER > 4000
+#if OSQUERY_VERSION_NUMBER <= 4000
   osquery::QueryData generate(osquery::QueryContext& context);
 #else
   osquery::TableRows generate(osquery::QueryContext& context);
