@@ -24,6 +24,10 @@ set(OSQUERY_EXTENSION_GROUP_NAME "trailofbits_osquery_extensions" CACHE STRING "
 set(OSQUERY_EXTENSION_GROUP_VERSION "1.2" CACHE STRING "Overrides osquery extension group version" FORCE)
 
 function(generateOsqueryVersion versionstring)
+  if(versionstring STREQUAL "")
+    message(FATAL_ERROR "Version string is empty")
+  endif()
+
   string(REPLACE "." ";" version_list ${versionstring} )
   list(GET version_list 0 major)
   set(OSQUERY_BUILD_VERSION_MAJOR ${major})
@@ -41,7 +45,7 @@ function(trailofbitsExtensionsMain)
   message(STATUS "Version: ${OSQUERY_EXTENSION_GROUP_VERSION}")
   message(STATUS "================================")
 
-  generateOsqueryVersion(${OSQUERY_VERSION_AUTODETECTED})
+  generateOsqueryVersion("${OSQUERY_VERSION_INTERNAL}")
   ImportLibraries()
   ImportExtensions()
 

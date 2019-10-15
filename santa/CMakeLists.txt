@@ -26,21 +26,21 @@ function(main)
 
   set(project_libraries boost_iostreams-mt)
 
-  add_osquery_extension_ex("SantaRulesTablePlugin" "table" "santa_rules"
+  addOsqueryExtensionEx("SantaRulesTablePlugin" "table" "santa_rules"
     SOURCES ${project_common_source_files} src/santarulestable.h src/santarulestable.cpp
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
     MAININCLUDES santarulestable.h
     LIBRARIES ${project_libraries}
   )
 
-  add_osquery_extension_ex("SantaAllowedDecisionsTablePlugin" "table" "santa_allowed"
+  addOsqueryExtensionEx("SantaAllowedDecisionsTablePlugin" "table" "santa_allowed"
     SOURCES ${project_common_source_files} src/santadecisionstable.h src/santadecisionstable.cpp
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
     MAININCLUDES santadecisionstable.h
     LIBRARIES ${project_libraries}
   )
 
-  add_osquery_extension_ex("SantaDeniedDecisionsTablePlugin" "table" "santa_denied"
+  addOsqueryExtensionEx("SantaDeniedDecisionsTablePlugin" "table" "santa_denied"
     SOURCES ${project_common_source_files} src/santadecisionstable.h src/santadecisionstable.cpp
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
     MAININCLUDES santadecisionstable.h

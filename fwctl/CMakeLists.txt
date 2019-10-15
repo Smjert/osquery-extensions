@@ -42,14 +42,14 @@ function(main)
     src/basetable.h
   )
 
-  add_osquery_extension_ex("HostBlacklistTable" "table" "HostBlacklist"
+  addOsqueryExtensionEx("HostBlacklistTable" "table" "HostBlacklist"
     SOURCES ${project_common_source_files} src/hostblacklist.h src/hostblacklist.cpp
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
     MAININCLUDES hostblacklist.h
     LIBRARIES ${project_libraries}
   )
 
-  add_osquery_extension_ex("PortBlacklistTable" "table" "PortBlacklist"
+  addOsqueryExtensionEx("PortBlacklistTable" "table" "PortBlacklist"
     SOURCES ${project_common_source_files} src/portblacklist.h src/portblacklist.cpp
     INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
     MAININCLUDES portblacklist.h

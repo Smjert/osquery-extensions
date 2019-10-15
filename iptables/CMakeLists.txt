@@ -25,28 +25,28 @@ function(main)
         extutils)
         #iptc)
 
-    add_osquery_extension_ex("IptablesExtTable" "table" "iptables_ext"
+    addOsqueryExtensionEx("IptablesExtTable" "table" "iptables_ext"
         SOURCES ${project_source_common_files} src/iptables_ext.h src/iptables_ext.cpp
         INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
         MAININCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src/iptables_ext.h"
         LIBRARIES ${project_libraries} #ip4tc
     )
 
-    add_osquery_extension_ex("Ip6tablesExtTable" "table" "ip6tables_ext"
+    addOsqueryExtensionEx("Ip6tablesExtTable" "table" "ip6tables_ext"
         SOURCES ${project_source_common_files} src/ip6tables_ext.h src/ip6tables_ext.cpp
         INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
         MAININCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src/ip6tables_ext.h"
         LIBRARIES ${project_libraries} #ip6tc
     )
 
-    add_osquery_extension_ex("IptablesPoliciesTable" "table" "iptables_policies"
+    addOsqueryExtensionEx("IptablesPoliciesTable" "table" "iptables_policies"
         SOURCES ${project_source_common_files} src/iptables_policies.h src/iptables_policies.cpp
         INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
         MAININCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src/iptables_policies.h"
         LIBRARIES ${project_libraries} #ip4tc
     )
 
-    add_osquery_extension_ex("Ip6tablesPoliciesTable" "table" "ip6tables_policies"
+    addOsqueryExtensionEx("Ip6tablesPoliciesTable" "table" "ip6tables_policies"
         SOURCES ${project_source_common_files} src/ip6tables_policies.h src/ip6tables_policies.cpp
         INCLUDEDIRS "${CMAKE_CURRENT_SOURCE_DIR}/src"
         MAININCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src/ip6tables_policies.h"
